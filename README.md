@@ -1,9 +1,9 @@
-# dsh-search-proxy
+# dsh-bailian-search
 
-让 DeepSeek Harness 的联网搜索在阿里云百炼网关上真正生效。
+零依赖 Node.js 反向代理，修复 DeepSeek Harness 在阿里云百炼网关上的联网搜索失效问题。
 
 ```bash
-git clone <repo> dsh-search-proxy && cd dsh-search-proxy && ./install.sh
+git clone git@github.com:hras11/dsh-bailian-search.git && cd dsh-bailian-search && ./install.sh
 ```
 
 就这一条。脚本会读你现有的 DSH 配置、装上代理、配好服务、开出开机自启，然后自检。
@@ -26,7 +26,7 @@ DSH 的 `@deepseek-ai/dsh-web-search-deepseek` 插件依赖 Anthropic 的**服�
 DSH 搜索插件
     │  POST http://127.0.0.1:8787/v1/messages   (无 system)
     ▼
-dsh-search-proxy                              ← 注入 billing header
+dsh-bailian-search                            ← 注入 billing header
     │  POST https://<workspace>.maas.aliyuncs.com/apps/anthropic/v1/messages
     ▼
 阿里云百炼网关                                 ← 识别到标识，启用联网搜索
@@ -39,8 +39,8 @@ dsh-search-proxy                              ← 注入 billing header
 **前置条件**：DSH 已装好，且 `cordis.patch.yml` 里已配置阿里云模型（本项目正是为你这种配置而写）。
 
 ```bash
-git clone <repo> dsh-search-proxy
-cd dsh-search-proxy
+git clone git@github.com:hras11/dsh-bailian-search.git
+cd dsh-bailian-search
 ./install.sh
 ```
 
@@ -55,8 +55,8 @@ cd dsh-search-proxy
 grep -o 'https://[^"]*maas\.aliyuncs\.com[^"]*' ~/.dsh/profiles/web/cordis.patch.yml
 
 # 2) 克隆并预览（先看清楚它打算做什么）
-git clone <repo> dsh-search-proxy
-cd dsh-search-proxy
+git clone git@github.com:hras11/dsh-bailian-search.git
+cd dsh-bailian-search
 ./install.sh --dry-run
 
 # 3) 确认无误后正式安装
