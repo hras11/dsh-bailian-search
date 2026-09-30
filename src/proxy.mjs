@@ -21,10 +21,12 @@ import http from "node:http";
 
 /**
  * Aliyun Bailian workspace gateway, Anthropic-compatible Messages base.
- * Overridable by UPSTREAM_BASE_URL so the same file works across workspaces;
- * the baked-in default keeps single-machine use configuration-free.
+ * Always supplied by install.sh via the unit's Environment= (it reads the
+ * gateway out of your DSH config), so no workspace ID is baked into the repo.
+ * A placeholder default keeps direct `node src/proxy.mjs` runs from crashing
+ * with a confusing error.
  */
-const UPSTREAM_BASE = (process.env.UPSTREAM_BASE_URL ?? "https://ws-l66md0uozgn4dzc7.cn-beijing.maas.aliyuncs.com/apps/anthropic/v1").replace(/\/+$/, "");
+const UPSTREAM_BASE = (process.env.UPSTREAM_BASE_URL ?? "https://REPLACE-WITH-YOUR-WORKSPACE.cn-beijing.maas.aliyuncs.com/apps/anthropic/v1").replace(/\/+$/, "");
 
 const LISTEN_HOST = "127.0.0.1";
 const LISTEN_PORT = Number.parseInt(process.env.PROXY_PORT ?? "8787", 10);
@@ -164,6 +166,19 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ error: { type: "proxy_error", message: String(error) } }));
   });
 });
+
+// Fail loudly on a placeholder upstream: otherwise every search would fail with
+// an opaque DNS error instead of telling the operator what to fix.
+if (UPSTREAM_BASE.includes("REPLACE-WITH-YOUR-WORKSPACE")) {
+  console.error("[proxy] UPSTREAM_BASE_URL is not set to a real gateway.");
+  console.error("[proxy] Install with ./install.sh (it reads your DSH config), or run:");
+  console.error("[proxy]   UPSTREAM_BASE_URL=https://<WorkspaceId>.<region>.maas.aliyuncs.com/apps/anthropic/v1 node src/proxy.mjs");
+  process.exit(1);
+}
+if (!URL.canParse(UPSTREAM_BASE)) {
+  console.error(`[proxy] UPSTREAM_BASE_URL is not a valid URL: ${UPSTREAM_BASE}`);
+  process.exit(1);
+}
 
 server.listen(LISTEN_PORT, LISTEN_HOST, () => {
   console.log(`[proxy] listening on http://${LISTEN_HOST}:${LISTEN_PORT}`);
