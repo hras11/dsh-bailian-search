@@ -1,0 +1,10 @@
+# Never commit credentials or machine-specific state.
+*.bak
+*.bak.*
+.install-state
+*.log
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*~

@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# proxy-ctl — control the anthropic-search-proxy systemd user service.
+#
+# The proxy injects the Aliyun Bailian billing header that enables Anthropic
+# server-side web_search for DSH. It runs under systemd so it survives DSH
+# restarts and machine reboots; this script is how DSH inspects and controls it
+# without owning the process (owning it would tie its lifetime to the DSH
+# process, which is exactly what we need to avoid).
+#
+# Usage: proxy-ctl {status|health|start|stop|restart|logs|enable|disable|upgrade|info}
+
+set -uo pipefail
+
+UNIT="anthropic-search-proxy.service"
+PREFIX="${DSH_SEARCH_PROXY_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/dsh-search-proxy}"
+STATE_FILE="$PREFIX/.install-state"
+PORT="${PROXY_PORT:-}"
+
+# Fall back to the port recorded at install time.
+if [ -z "$PORT" ] && [ -f "$STATE_FILE" ]; then
+  PORT=$(sed -n 's/^PORT=//p' "$STATE_FILE" | head -1)
+fi
+PORT="${PORT:-8787}"
+HEALTH_URL="http://127.0.0.1:${PORT}/healthz"
+
+usage() {
+  cat <<EOF
+proxy-ctl — manage the DSH anthropic search proxy
+
+  status    unit state, PID, uptime, port health (one-shot, script friendly)
+  health    probe the local /healthz endpoint
+  info      install location, source directory, recorded version
+  upgrade   re-run install.sh from the recorded source directory
+  start     start the service
+  stop      stop the service
+  restart   restart the service
+  logs [n]  show last n journal lines (default 40)
+  enable    enable at boot (requires lingering to work when logged out)
+  disable   disable at boot and stop
+
+Environment: uses 'systemctl --user'; no root required.
+EOF
+}
+
+sc() { systemctl --user "$@"; }
+
+state_val() { [ -f "$STATE_FILE" ] && sed -n "s/^$1=//p" "$STATE_FILE" | head -1; }
+
+cmd_status() {
+  local active enabled pid since
+  active=$(sc is-active "$UNIT" 2>/dev/null || true)
+  enabled=$(sc is-enabled "$UNIT" 2>/dev/null || true)
+  pid=$(sc show -p MainPID --value "$UNIT" 2>/dev/null || true)
+  since=$(sc show -p ActiveEnterTimestamp --value "$UNIT" 2>/dev/null || true)
+
+  printf 'unit      : %s\n' "$UNIT"
+  printf 'active    : %s\n' "${active:-unknown}"
+  printf 'enabled   : %s\n' "${enabled:-unknown}"
+  printf 'main pid  : %s\n' "${pid:-0}"
+  printf 'since     : %s\n' "${since:--}"
+
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null || echo 000)
+  if [ "$code" = "200" ]; then
+    printf 'health    : OK (%s)\n' "$HEALTH_URL"
+  else
+    printf 'health    : DOWN (HTTP %s at %s)\n' "$code" "$HEALTH_URL"
+  fi
+
+  [ "$active" = "active" ] && [ "$code" = "200" ] && return 0 || return 1
+}
+
+cmd_health() {
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null || echo 000)
+  if [ "$code" = "200" ]; then
+    echo "OK: $HEALTH_URL"
+    curl -s --max-time 5 "$HEALTH_URL"; echo
+    return 0
+  fi
+  echo "DOWN: HTTP $code at $HEALTH_URL"
+  return 1
+}
+
+cmd_logs() {
+  journalctl --user -u "$UNIT" -n "${1:-40}" --no-pager 2>/dev/null || echo "no journal entries"
+}
+
+cmd_info() {
+  if [ ! -f "$STATE_FILE" ]; then
+    echo "No install state recorded at $STATE_FILE"
+    return 1
+  fi
+  printf 'prefix    : %s\n' "$PREFIX"
+  printf 'source    : %s\n' "$(state_val SRC)"
+  printf 'version   : %s\n' "$(state_val VERSION)"
+  printf 'installed : %s\n' "$(state_val INSTALLED_AT)"
+  printf 'upstream  : %s\n' "$(state_val UPSTREAM)"
+  printf 'port      : %s\n' "$(state_val PORT)"
+  printf 'config    : %s\n' "$(state_val PATCH)"
+}
+
+# Re-run the installer from wherever this copy was installed from. The clone can
+# have moved; SRC is recorded at install time.
+cmd_upgrade() {
+  local src
+  src=$(state_val SRC)
+  if [ -z "$src" ]; then
+    echo "No recorded source directory. Re-run install.sh from a fresh clone." >&2
+    return 1
+  fi
+  if [ ! -x "$src/install.sh" ]; then
+    echo "Source directory no longer usable: $src" >&2
+    echo "Clone again and run ./install.sh from there." >&2
+    return 1
+  fi
+
+  if [ -d "$src/.git" ]; then
+    echo "Pulling latest in $src"
+    if git -C "$src" pull --ff-only 2>&1 | sed 's/^/  /'; then
+      :
+    else
+      echo "  ! git pull failed (local changes or no remote); installing current checkout" >&2
+    fi
+  fi
+
+  echo "Re-running installer..."
+  "$src/install.sh"
+}
+
+case "${1:-status}" in
+  status)  cmd_status ;;
+  health)  cmd_health ;;
+  info)    cmd_info ;;
+  upgrade) cmd_upgrade ;;
+  start)   sc start "$UNIT"     && echo "started $UNIT" ;;
+  stop)    sc stop "$UNIT"      && echo "stopped $UNIT" ;;
+  restart) sc restart "$UNIT"   && echo "restarted $UNIT" ;;
+  logs)    cmd_logs "${2:-40}" ;;
+  enable)  sc enable --now "$UNIT" && echo "enabled + started $UNIT" ;;
+  disable) sc disable --now "$UNIT" && echo "disabled + stopped $UNIT" ;;
+  -h|--help|help) usage ;;
+  *) echo "unknown command: $1" >&2; usage >&2; exit 2 ;;
+esac
