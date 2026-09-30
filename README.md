@@ -8,7 +8,20 @@ git clone git@github.com:hras11/dsh-bailian-search.git && cd dsh-bailian-search 
 
 就这一条。脚本会读你现有的 DSH 配置、装上代理、配好服务、开出开机自启，然后自检。
 
+**装完记得重启 DSH**，然后正常提问即可，无需任何特殊语法。
+
 ---
+
+## 速览
+
+| | |
+|---|---|
+| **解决什么** | DSH 在阿里云百炼网关上搜索「返回 200 但没有结果」 |
+| **怎么解决** | 本地代理转发时注入网关要求的 billing header |
+| **技术栈** | Node.js（纯内置模块，零依赖）+ systemd user service |
+| **装到哪** | `~/.local/share/dsh-bailian-search/`，clone 目录可删 |
+| **怎么管** | `proxy-ctl status / logs / restart / upgrade` |
+| **前置条件** | DSH 已配置阿里云模型（网关地址从配置里自动读取） |
 
 ## 问题
 
@@ -179,6 +192,17 @@ health    : OK (http://127.0.0.1:8787/healthz)   ← 端口在听
 ```
 
 会停服务、删单元、删安装目录。**注意**：它不会自动改回 `cordis.patch.yml`，只打印提示告诉你要删哪一节 —— 因为那属于你的 DSH 配置，交给你自己决定。
+
+要完全恢复到「从未安装」，再手动删掉配置里的这一节：
+
+```yaml
+- id: web-search-deepseek
+  name: "@deepseek-ai/dsh-web-search-deepseek"
+  config:
+    baseURL: http://127.0.0.1:8787/v1
+```
+
+然后**重启 DSH**。搜索会回到插件默认行为（在阿里云网关上依然不可用，因为缺 billing header —— 这正是本项目要解决的问题）。
 
 ## 安装位置
 
@@ -351,12 +375,17 @@ systemd 保证代理「活着」，`proxy-ctl` 保证 DSH 能「管」。两者�
 ## 项目结构
 
 ```
-install.sh         安装/升级/卸载
-src/proxy.mjs      代理本体（Node 内置模块，零依赖）
-bin/proxy-ctl      管理脚本
+dsh-bailian-search/
+├── install.sh         安装 / 升级 / 卸载
+├── src/proxy.mjs      代理本体（Node 内置模块，零依赖）
+├── bin/proxy-ctl      管理脚本
+├── README.md
+└── LICENSE            MIT
 ```
 
-无构建步骤，无 npm 依赖。
+无构建步骤，无 npm 依赖，无 `package.json` —— 克隆下来即可运行。
+
+运行时文件装到 `~/.local/share/dsh-bailian-search/`（见[安装位置](#安装位置)）。
 
 ## 验证记录
 

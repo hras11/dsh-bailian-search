@@ -53,19 +53,17 @@ cmd_status() {
   pid=$(sc show -p MainPID --value "$UNIT" 2>/dev/null || true)
   since=$(sc show -p ActiveEnterTimestamp --value "$UNIT" 2>/dev/null || true)
 
-  printf 'unit      : %s\n' "$UNIT"
-  printf 'active    : %s\n' "${active:-unknown}"
-  printf 'enabled   : %s\n' "${enabled:-unknown}"
-  printf 'main pid  : %s\n' "${pid:-0}"
-  printf 'since     : %s\n' "${since:--}"
-
-  local code
+  local code health
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null || echo 000)
   if [ "$code" = "200" ]; then
-    printf 'health    : OK (%s)\n' "$HEALTH_URL"
+    health="OK ($HEALTH_URL)"
   else
-    printf 'health    : DOWN (HTTP %s at %s)\n' "$code" "$HEALTH_URL"
+    health="DOWN (HTTP $code at $HEALTH_URL)"
   fi
+
+  # One write: piping this into `head` must not trigger broken-pipe errors.
+  printf 'unit      : %s\nactive    : %s\nenabled   : %s\nmain pid  : %s\nsince     : %s\nhealth    : %s\n' \
+    "$UNIT" "${active:-unknown}" "${enabled:-unknown}" "${pid:-0}" "${since:--}" "$health"
 
   [ "$active" = "active" ] && [ "$code" = "200" ] && return 0 || return 1
 }
@@ -91,13 +89,16 @@ cmd_info() {
     echo "No install state recorded at $STATE_FILE"
     return 1
   fi
-  printf 'prefix    : %s\n' "$PREFIX"
-  printf 'source    : %s\n' "$(state_val SRC)"
-  printf 'version   : %s\n' "$(state_val VERSION)"
-  printf 'installed : %s\n' "$(state_val INSTALLED_AT)"
-  printf 'upstream  : %s\n' "$(state_val UPSTREAM)"
-  printf 'port      : %s\n' "$(state_val PORT)"
-  printf 'config    : %s\n' "$(state_val PATCH)"
+  # Build the whole report in one write so a consumer like `| head` closing the
+  # pipe early cannot make later printf calls fail with a broken-pipe error.
+  printf 'prefix    : %s\nsource    : %s\nversion   : %s\ninstalled : %s\nupstream  : %s\nport      : %s\nconfig    : %s\n' \
+    "$PREFIX" \
+    "$(state_val SRC)" \
+    "$(state_val VERSION)" \
+    "$(state_val INSTALLED_AT)" \
+    "$(state_val UPSTREAM)" \
+    "$(state_val PORT)" \
+    "$(state_val PATCH)"
 }
 
 # Re-run the installer from wherever this copy was installed from. The clone can
