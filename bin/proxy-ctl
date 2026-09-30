@@ -12,17 +12,8 @@
 set -uo pipefail
 
 UNIT="anthropic-search-proxy.service"
-DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
-PREFIX="${DSH_SEARCH_PROXY_PREFIX:-$DATA_HOME/dsh-bailian-search}"
+PREFIX="${DSH_SEARCH_PROXY_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/dsh-bailian-search}"
 STATE_FILE="$PREFIX/.install-state"
-
-# The project was previously installed as dsh-search-proxy; keep working if a
-# migration has not happened yet (e.g. this copy was run before install.sh).
-if [ ! -d "$PREFIX" ] && [ -z "${DSH_SEARCH_PROXY_PREFIX:-}" ] && [ -d "$DATA_HOME/dsh-search-proxy" ]; then
-  PREFIX="$DATA_HOME/dsh-search-proxy"
-  STATE_FILE="$PREFIX/.install-state"
-fi
-
 PORT="${PROXY_PORT:-}"
 
 # Fall back to the port recorded at install time.
