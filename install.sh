@@ -3,9 +3,9 @@
 #
 # Typical use, on any machine with DSH already configured:
 #
-#   git clone <repo> dsh-search-proxy && cd dsh-search-proxy && ./install.sh
+#   git clone git@github.com:hras11/dsh-bailian-search.git && cd dsh-bailian-search && ./install.sh
 #
-# Files are installed to $PREFIX (default ~/.local/share/dsh-search-proxy) so
+# Files are installed to $PREFIX (default ~/.local/share/dsh-bailian-search) so
 # the systemd unit points at a stable path and the clone directory can be moved
 # or deleted afterwards. To update, re-run this script from a fresh clone or
 # from the original one: it records the source directory and refreshes in place.
@@ -29,7 +29,9 @@ UNIT_NAME="anthropic-search-proxy"
 UNIT_DIR="$HOME/.config/systemd/user"
 UNIT_PATH="$UNIT_DIR/$UNIT_NAME.service"
 
-PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/dsh-search-proxy"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+PREFIX="$DATA_HOME/dsh-bailian-search"
+LEGACY_PREFIX="$DATA_HOME/dsh-search-proxy"
 STATE_FILE="$PREFIX/.install-state"
 
 UPSTREAM=""
@@ -184,6 +186,21 @@ fi
 # --- install files to a stable location --------------------------------------
 # Copying (rather than pointing at the clone) keeps the unit valid even after
 # the clone is moved or deleted; re-running this script refreshes the copy.
+#
+# The project was previously called dsh-search-proxy and installed under that
+# name. Migrate the old directory so existing installs do not end up with two
+# copies and a stale unit.
+if [ "$PREFIX" = "$DATA_HOME/dsh-bailian-search" ] && [ -d "$LEGACY_PREFIX" ]; then
+  if [ -d "$PREFIX" ]; then
+    # New location already exists: just drop the stale copy.
+    rm -rf "$LEGACY_PREFIX"
+    ok "removed legacy path $LEGACY_PREFIX"
+  else
+    mv "$LEGACY_PREFIX" "$PREFIX"
+    ok "migrated $LEGACY_PREFIX -> $PREFIX"
+  fi
+fi
+
 mkdir -p "$PREFIX"
 
 # Older layouts kept a bin/ subdirectory; drop it if it is now empty so an

@@ -67,7 +67,7 @@ cd dsh-bailian-search
 #    npm exec @deepseek-ai/dsh web
 
 # 5) 验证服务
-~/.local/share/dsh-search-proxy/proxy-ctl status
+~/.local/share/dsh-bailian-search/proxy-ctl status
 ```
 
 `status` 输出应类似：
@@ -130,7 +130,7 @@ health    : OK (http://127.0.0.1:8787/healthz)   ← 端口在听
 ### 安装后目录长什么样
 
 ```
-~/.local/share/dsh-search-proxy/     ← 实际运行的文件（clone 可删）
+~/.local/share/dsh-bailian-search/     ← 实际运行的文件（clone 可删）
 ├── proxy.mjs                        代理本体
 ├── proxy-ctl                        管理脚本
 └── .install-state                   安装记录（源目录、版本、端口）
@@ -167,7 +167,7 @@ health    : OK (http://127.0.0.1:8787/healthz)   ← 端口在听
 改了代码或拉了新版本后，重装即可：
 
 ```bash
-~/.local/share/dsh-search-proxy/proxy-ctl upgrade
+~/.local/share/dsh-bailian-search/proxy-ctl upgrade
 ```
 
 它会 `git pull` 安装时记录的源目录，然后重跑 `install.sh`。源目录已删除时，重新 clone 再跑一次 `./install.sh` 也行 —— 安装是幂等的。
@@ -182,10 +182,10 @@ health    : OK (http://127.0.0.1:8787/healthz)   ← 端口在听
 
 ## 安装位置
 
-文件装到 `~/.local/share/dsh-search-proxy/`（可用 `--prefix` 改），systemd 单元指向那里：
+文件装到 `~/.local/share/dsh-bailian-search/`（可用 `--prefix` 改），systemd 单元指向那里：
 
 ```
-~/.local/share/dsh-search-proxy/
+~/.local/share/dsh-bailian-search/
 ├── proxy.mjs          代理本体（从 clone 复制过来）
 ├── proxy-ctl          管理脚本
 └── .install-state     安装记录：源目录、版本、端口、网关
@@ -214,7 +214,7 @@ health    : OK (http://127.0.0.1:8787/healthz)   ← 端口在听
 搜到时回答里会有引用链接。想确认某次是否真的联网了，看代理日志：
 
 ```bash
-~/.local/share/dsh-search-proxy/proxy-ctl logs 10 | grep search=
+~/.local/share/dsh-bailian-search/proxy-ctl logs 10 | grep search=
 ```
 
 `search=OK` 表示这次确实拿到了联网结果。
@@ -230,7 +230,7 @@ health    : OK (http://127.0.0.1:8787/healthz)   ← 端口在听
 ## 日常使用
 
 ```bash
-CTL=~/.local/share/dsh-search-proxy/proxy-ctl
+CTL=~/.local/share/dsh-bailian-search/proxy-ctl
 
 $CTL status          # 单元状态 + PID + 端口健康（退出码反映可用性）
 $CTL info            # 安装位置、源目录、版本、网关
@@ -304,7 +304,7 @@ pkill -f proxy.mjs        # 然后 proxy-ctl restart
 
 ```bash
 ./install.sh                       # 重装（刷新安装目录的副本）
-$CTL restart                       # 若直接改了 ~/.local/share/dsh-search-proxy/proxy.mjs
+$CTL restart                       # 若直接改了 ~/.local/share/dsh-bailian-search/proxy.mjs
 ```
 
 **改了 `cordis.patch.yml` 后** —— 必须重启 DSH（代理不受影响）。
