@@ -46,6 +46,99 @@ cd dsh-search-proxy
 
 装完后**重启 DSH**，然后随便搜点什么验证。
 
+### 完整流程走一遍
+
+下面是新设备上从零到可用的全过程，含验证：
+
+```bash
+# 1) 确认前置条件：DSH 配置里已有阿里云网关
+grep -o 'https://[^"]*maas\.aliyuncs\.com[^"]*' ~/.dsh/profiles/web/cordis.patch.yml
+
+# 2) 克隆并预览（先看清楚它打算做什么）
+git clone <repo> dsh-search-proxy
+cd dsh-search-proxy
+./install.sh --dry-run
+
+# 3) 确认无误后正式安装
+./install.sh
+
+# 4) 重启 DSH 让配置生效（在跑 dsh web 的终端里 Ctrl+C，再重新启动）
+#    Ctrl+C
+#    npm exec @deepseek-ai/dsh web
+
+# 5) 验证服务
+~/.local/share/dsh-search-proxy/proxy-ctl status
+```
+
+`status` 输出应类似：
+
+```
+unit      : anthropic-search-proxy.service
+active    : active          ← 服务在跑
+enabled   : enabled         ← 开机自启已开
+main pid  : 17500
+since     : Thu 2026-10-01 05:14:56 +08
+health    : OK (http://127.0.0.1:8787/healthz)   ← 端口在听
+```
+
+关键三项是 `active: active`、`enabled: enabled`、`health: OK`。都对了说明代理侧没问题。若第 4 步之后 DSH 里搜索仍失败，看下面的[故障排查](#故障排查)。
+
+### 常见情形
+
+**情形一：网关地址和示例相同（最常见）**
+
+不需要任何参数，`./install.sh` 会自己从你的 DSH 配置里读出来。
+
+**情形二：用不同的阿里云 workspace**
+
+脚本提取的是**你配置里已有的地址**，所以通常也不用管。若想显式指定：
+
+```bash
+./install.sh --upstream https://<WorkspaceId>.<region>.maas.aliyuncs.com/apps/anthropic/v1
+```
+
+⚠️ 不同 workspace / region 的网关不同，要填**目标机器自己的**地址。填错会 401 或 404。
+
+**情形三：DSH profile 不在默认位置**
+
+```bash
+./install.sh --profile ~/.dsh/profiles/你的profile名
+```
+
+路径写错会立即报错，不会静默继续。
+
+**情形四：配置里没有阿里云地址**
+
+脚本会提示 `could not auto-detect the Aliyun gateway URL`，此时必须用 `--upstream` 显式指定。
+
+**情形五：端口 8787 被占用**
+
+```bash
+./install.sh --port 8899
+```
+
+脚本会把 DSH 配置和 systemd 单元一起改成新端口，保持一致。
+
+**情形六：不想开机自启**
+
+```bash
+./install.sh --no-enable
+```
+
+之后想开：`proxy-ctl enable`。
+
+### 安装后目录长什么样
+
+```
+~/.local/share/dsh-search-proxy/     ← 实际运行的文件（clone 可删）
+├── proxy.mjs                        代理本体
+├── proxy-ctl                        管理脚本
+└── .install-state                   安装记录（源目录、版本、端口）
+
+~/.config/systemd/user/anthropic-search-proxy.service    ← 服务单元
+~/.dsh/profiles/web/cordis.patch.yml                     ← 被追加 web-search 节
+```
+
 ### 选项
 
 ```bash
@@ -69,17 +162,70 @@ cd dsh-search-proxy
 | 缺失 `/v1` | 自动补全（缺这段会 404，是踩过的坑） |
 | lingering | 检测状态；关闭时打印开启命令 |
 
-## 安装位置
+### 更新
 
-文件装到 `~/.local/share/dsh-search-proxy/`（可用 `--prefix` 改），systemd 单元指向那里。
-
-**因此 clone 目录用完可以随便删**。想更新时：
+改了代码或拉了新版本后，重装即可：
 
 ```bash
 ~/.local/share/dsh-search-proxy/proxy-ctl upgrade
 ```
 
-它会 `git pull` 你原来的 clone 目录（路径在安装时记录）并重装。若 clone 已删除，重新 clone 跑一次 `./install.sh` 即可 —— 安装是幂等的。
+它会 `git pull` 安装时记录的源目录，然后重跑 `install.sh`。源目录已删除时，重新 clone 再跑一次 `./install.sh` 也行 —— 安装是幂等的。
+
+### 卸载
+
+```bash
+./install.sh --uninstall
+```
+
+会停服务、删单元、删安装目录。**注意**：它不会自动改回 `cordis.patch.yml`，只打印提示告诉你要删哪一节 —— 因为那属于你的 DSH 配置，交给你自己决定。
+
+## 安装位置
+
+文件装到 `~/.local/share/dsh-search-proxy/`（可用 `--prefix` 改），systemd 单元指向那里：
+
+```
+~/.local/share/dsh-search-proxy/
+├── proxy.mjs          代理本体（从 clone 复制过来）
+├── proxy-ctl          管理脚本
+└── .install-state     安装记录：源目录、版本、端口、网关
+```
+
+**因此 clone 目录用完可以随便删**。
+
+## 在 DSH 里使用
+
+装好并重启 DSH 后，**不需要任何额外操作或特殊语法** —— 直接正常提问即可，模型会自行判断何时联网。
+
+```
+今天济南天气怎么样？
+最近有什么 AI 方面的新闻？
+帮我查一下 xxx 的最新版本号
+```
+
+几个实际要点：
+
+**① 搜索是模型自主触发的**
+
+不是每个问题都会联网。问「1+1 等于几」它不会去搜；问带时效性的（天气、新闻、股价、最新版本）才会。若某次没搜，换更明确需要实时信息的问法。
+
+**② 结果会带来源链接**
+
+搜到时回答里会有引用链接。想确认某次是否真的联网了，看代理日志：
+
+```bash
+~/.local/share/dsh-search-proxy/proxy-ctl logs 10 | grep search=
+```
+
+`search=OK` 表示这次确实拿到了联网结果。
+
+**③ 重启 DSH 才会生效**
+
+改的是 `cordis.patch.yml`，DSH 启动时读取。**代理本身不用重启**，只有这一步需要。
+
+**④ 代理挂了不影响聊天**
+
+搜索走本地代理，聊天走阿里云网关直连。代理停了只会让搜索报 `fetch failed`，聊天一切正常。
 
 ## 日常使用
 

@@ -184,7 +184,14 @@ fi
 # --- install files to a stable location --------------------------------------
 # Copying (rather than pointing at the clone) keeps the unit valid even after
 # the clone is moved or deleted; re-running this script refreshes the copy.
-mkdir -p "$PREFIX/bin"
+mkdir -p "$PREFIX"
+
+# Older layouts kept a bin/ subdirectory; drop it if it is now empty so an
+# upgrade does not leave confusing empty directories behind.
+if [ -d "$PREFIX/bin" ] && [ -z "$(ls -A "$PREFIX/bin" 2>/dev/null)" ]; then
+  rmdir "$PREFIX/bin" 2>/dev/null || true
+fi
+
 install -m 0644 "$SCRIPT_DIR/src/proxy.mjs" "$PREFIX/proxy.mjs"
 install -m 0755 "$SCRIPT_DIR/bin/proxy-ctl" "$PREFIX/proxy-ctl"
 ok "installed files to $PREFIX"
